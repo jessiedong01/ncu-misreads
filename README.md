@@ -1,53 +1,91 @@
-# ncu-misreads
+# Reading Nsight Compute
 
-Four kernels whose Nsight Compute reports are each misleading in a specific way.
+Nsight Compute (NCU) reports a lot of numbers about a GPU kernel. This repo has
+a few small tests showing why occupancy and warp stalls should not be read by
+themselves.
 
-The point is not that these kernels are interesting. It is that reading their
-reports the usual way gives you the wrong answer, and reading five metrics in
-one particular order gives you the right one.
+The tests were run on one NVIDIA A100-SXM4-40GB. They are teaching examples,
+not a claim that five measurements explain every kernel.
 
-## The five metrics
+## A useful first pass
 
-| metric | question |
+| Measurement | Question |
 |---|---|
-| `sm__throughput.avg.pct_of_peak_sustained_elapsed` | is compute busy |
-| `gpu__dram_throughput.avg.pct_of_peak_sustained_elapsed` | is memory busy |
-| `smsp__issue_active.avg.pct_of_peak_sustained_active` | is anything issuing |
-| `smsp__average_warps_issue_stalled_*_per_issue_active.ratio` | stalled on what |
-| `l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio` | is traffic wasted |
+| SM throughput | How busy is the processing hardware? |
+| DRAM throughput | How much of the off-chip memory bandwidth is being used? |
+| Issue activity | How often does the GPU start a new instruction? |
+| Warp stalls | What keeps groups of threads from continuing? |
+| Sectors per request | Is each memory load using extra memory sectors? |
 
-Achieved occupancy is collected too, but as evidence rather than as a target.
+Start with SM and DRAM throughput. If neither is high, check that the kernel
+launched enough work, then look at issue activity and warp stalls. Occupancy is
+still useful context, but it is not a performance score.
 
-## Reading order
+## Results
 
-Start with the first two. If compute is high, find the saturated pipe. If dram
-is high, go to sectors per request. If both are low, the kernel is latency
-bound, so check issue slot utilization and then the dominant stall.
+### Higher occupancy was slower
 
-## The kernels
+The same `gather` kernel loaded one FP32 value per thread. Only the distance
+between the input addresses changed.
 
-`fma_dependent` and `fma_ilp` do the same number of fused multiply-adds.
-The first gives every thread one dependent chain, so a warp has one instruction
-in flight and needs many warps to stay busy. The second gives every thread eight
-independent chains, which costs registers and lowers occupancy.
+| Read pattern | Duration | Achieved occupancy | DRAM throughput | Sectors/request |
+|---|---:|---:|---:|---:|
+| Nearby reads (stride 1) | 24.800 us | 74.33% | 55.60% | 4 |
+| Spread-out reads (stride 32) | 62.816 us | 85.66% | 24.11% | 32 |
 
-`mem_covered` issues coalesced loads with enough warps to cover them. The warp
-stall breakdown is dominated by long scoreboard while the issue slots stay busy.
+The spread-out version was 2.53x slower even though its achieved occupancy was
+higher. A warp requested 128 useful bytes in both cases. The second pattern
+used 32 memory sectors instead of 4.
 
-`gather` runs twice over the same data, at stride 1 and stride 32. A warp
-loading 32 contiguous 4 byte values touches 128 bytes, and a sector is 32 bytes,
-so 4 sectors per request is the floor.
+### Much lower occupancy had almost the same runtime
+
+These kernels performed the same total number of fused multiply-adds. One used
+many warps with one dependent calculation per thread. The other used fewer
+warps with 16 independent calculations per thread.
+
+| Kernel | Duration | Achieved occupancy | SM throughput |
+|---|---:|---:|---:|
+| Many warps, one dependent chain | 248.800 us | 88.67% | 96.33% |
+| Fewer warps, 16 independent chains | 250.336 us | 12.07% | 95.67% |
+
+Occupancy was more than 7x lower, but runtime changed by less than 1%. The
+independent calculations gave the GPU enough other work to do while an earlier
+calculation was still finishing.
+
+### Similar stall values, different problems
+
+`long scoreboard` means warps were waiting for data from memory. Its value is
+not a percentage of runtime.
+
+| Kernel | Long scoreboard | DRAM throughput | Sectors/request |
+|---|---:|---:|---:|
+| In-order memory reads | 97.85 | 90.13% | 4 |
+| Spread-out gather reads | 107.53 | 24.11% | 32 |
+
+The first kernel was already near the DRAM bandwidth limit. The second used
+eight times as many sectors because its reads were spread out. Almost the same
+stall value pointed to a different thing to fix.
+
+The complete measurements are in [`a100-results.csv`](a100-results.csv).
 
 ## Run
 
 ```bash
-./run_ncu.sh sm_90
+./run_ncu.sh sm_80   # A100
 ```
 
-Use `sm_89` for an RTX 4090 or `sm_100` for a B200.
+Use `sm_89` for an RTX 4090, `sm_90` for an H100, or `sm_100` for a B200.
+The script builds the kernels, checks whether NCU can read the GPU performance
+counters, and writes the output to `ncu-results.csv`. Some systems require
+`sudo`; containers may need to be started with `SYS_ADMIN` access.
 
-The script checks that Nsight Compute can actually read the performance counters
-before profiling anything. That check exists because the counters are restricted
-to admin by default, and inside most cloud containers the profile silently
-collects nothing. If it fails there, no amount of rerunning helps; the container
-needed `--cap-add=SYS_ADMIN` when it was created.
+## Related examples
+
+- NVIDIA's [Using Nsight Compute to Inspect Your Kernels](https://developer.nvidia.com/blog/using-nsight-compute-to-inspect-your-kernels/)
+  changes a memory access pattern from 32 to 4 transactions per request and
+  reports a 68% reduction in kernel duration.
+- Vasily Volkov's [Better Performance at Lower Occupancy](https://www.nvidia.com/content/gtc-2010/pdfs/2238_gtc2010.pdf)
+  is the classic explanation of using more independent work per thread instead
+  of trying to maximize occupancy.
+- NVIDIA's [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)
+  explains the full report and the exact counter definitions.

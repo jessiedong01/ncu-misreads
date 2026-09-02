@@ -1,0 +1,6 @@
+kernel,variant,duration_ns,sm_throughput_pct,dram_throughput_pct,issue_active_pct,achieved_occupancy_pct,long_scoreboard,wait,not_selected,mio_throttle,sectors_per_request,registers_per_thread
+fma_dependent,one_dependent_chain,248800,96.33,0.00,58.52,88.67,0,2.50,10.28,0.00,0,16
+fma_ilp,16_independent_chains,250336,95.67,0.00,51.27,12.07,0,1.11,0.79,0,0,32
+mem_covered,in_order_reads,106912,10.57,90.13,9.01,92.38,97.85,3.10,1.32,12.86,4,22
+gather,stride_1,24800,21.34,55.60,24.17,74.33,37.97,2.46,1.14,0.00,4,16
+gather,stride_32,62816,8.11,24.11,8.50,85.66,107.53,2.24,0.39,0.34,32,16
