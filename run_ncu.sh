@@ -44,8 +44,18 @@ echo "built"
 
 echo
 echo "=== step 3: permission smoke test ==="
-# The failure everyone hits: counters are admin-only by default.
-if ! ncu --metrics sm__cycles_elapsed.avg --target-processes all ./ncu_demos >/tmp/ncu_smoke.txt 2>&1; then
+# The failure everyone hits: counters are admin-only by default. On a machine
+# you own, running ncu under sudo is usually enough, so try that before telling
+# anyone to reboot.
+NCU=$(command -v ncu)
+SUDO=""
+if ! "$NCU" --metrics sm__cycles_elapsed.avg ./ncu_demos >/tmp/ncu_smoke.txt 2>&1; then
+  if command -v sudo >/dev/null && sudo "$NCU" --metrics sm__cycles_elapsed.avg ./ncu_demos >/tmp/ncu_smoke_sudo.txt 2>&1; then
+    SUDO="sudo"
+    echo "counters readable under sudo, using it for the profile"
+  fi
+fi
+if [ -z "$SUDO" ] && ! ncu --metrics sm__cycles_elapsed.avg --target-processes all ./ncu_demos >/tmp/ncu_smoke.txt 2>&1; then
   echo "PROFILING FAILED. first 20 lines:"
   head -20 /tmp/ncu_smoke.txt
   echo
@@ -58,11 +68,11 @@ if ! ncu --metrics sm__cycles_elapsed.avg --target-processes all ./ncu_demos >/t
   echo "     You cannot fix this from inside a running pod. Pick another host."
   exit 1
 fi
-echo "counters readable"
+[ -z "$SUDO" ] && echo "counters readable"
 
 echo
 echo "=== step 4: profile ==="
-ncu --csv --metrics "$METRICS" ./ncu_demos | tee ncu-results.csv
+$SUDO "$NCU" --csv --metrics "$METRICS" ./ncu_demos | tee ncu-results.csv
 
 echo
 echo "=== done. results in ncu-results.csv ==="
