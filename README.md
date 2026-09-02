@@ -1,12 +1,3 @@
-# Reading Nsight Compute
-
-Nsight Compute (NCU) reports a lot of numbers about a GPU kernel. This repo has
-a few small tests showing why occupancy and warp stalls should not be read by
-themselves.
-
-The tests were run on one NVIDIA A100-SXM4-40GB. They are teaching examples,
-not a claim that five measurements explain every kernel.
-
 ## More stuff on NCU!!
 
 - [Using Nsight Compute to Inspect Your Kernels](https://developer.nvidia.com/blog/using-nsight-compute-to-inspect-your-kernels/)
