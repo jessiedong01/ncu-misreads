@@ -44,20 +44,25 @@ echo "built"
 
 echo
 echo "=== step 3: permission smoke test ==="
+# Write scratch next to the repo, not /tmp. With fs.protected_regular set, root
+# cannot write a /tmp file owned by another user, and the failed redirect leaves
+# you reading a stale log from the previous attempt.
+SMOKE="$(mktemp "${PWD}/.ncu_smoke.XXXXXX")"
+trap 'rm -f "$SMOKE"' EXIT
 # The failure everyone hits: counters are admin-only by default. On a machine
 # you own, running ncu under sudo is usually enough, so try that before telling
 # anyone to reboot.
 NCU=$(command -v ncu)
 SUDO=""
-if ! "$NCU" --metrics sm__cycles_elapsed.avg ./ncu_demos >/tmp/ncu_smoke.txt 2>&1; then
-  if command -v sudo >/dev/null && sudo "$NCU" --metrics sm__cycles_elapsed.avg ./ncu_demos >/tmp/ncu_smoke_sudo.txt 2>&1; then
+if ! "$NCU" --metrics sm__cycles_elapsed.avg ./ncu_demos >"$SMOKE" 2>&1; then
+  if command -v sudo >/dev/null && sudo "$NCU" --metrics sm__cycles_elapsed.avg ./ncu_demos >"$SMOKE" 2>&1; then
     SUDO="sudo"
     echo "counters readable under sudo, using it for the profile"
   fi
 fi
-if [ -z "$SUDO" ] && ! ncu --metrics sm__cycles_elapsed.avg --target-processes all ./ncu_demos >/tmp/ncu_smoke.txt 2>&1; then
+if [ -z "$SUDO" ] && ! ncu --metrics sm__cycles_elapsed.avg --target-processes all ./ncu_demos >"$SMOKE" 2>&1; then
   echo "PROFILING FAILED. first 20 lines:"
-  head -20 /tmp/ncu_smoke.txt
+  head -20 "$SMOKE"
   echo
   echo "If you see ERR_NVGPUCTRPERM, the GPU performance counters are locked to"
   echo "admin. Fixes, in order of how likely they are to work:"

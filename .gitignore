@@ -1,2 +1,4 @@
 ncu_demos
 *.ncu-rep
+.ncu_smoke.*
+ncu-results.csv
