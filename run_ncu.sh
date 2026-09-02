@@ -21,7 +21,20 @@ M
 )
 
 echo "=== step 1: is ncu here and can it read the counters ==="
-command -v ncu >/dev/null || { echo "ncu not on PATH. install Nsight Compute."; exit 1; }
+# Nsight Compute ships separately from the CUDA toolkit on most images, and
+# when it is installed it usually is not on PATH.
+if ! command -v ncu >/dev/null 2>&1; then
+  FOUND=$(find /opt/nvidia /usr/local/cuda* /usr/local -maxdepth 4 -name ncu -type f 2>/dev/null | head -1)
+  if [ -n "$FOUND" ]; then
+    export PATH="$(dirname "$FOUND"):$PATH"
+    echo "found ncu at $FOUND"
+  else
+    echo "ncu not installed. on Ubuntu with the CUDA repo:"
+    echo "    sudo apt-get update && sudo apt-get install -y nsight-compute"
+    echo "then run this script again."
+    exit 1
+  fi
+fi
 ncu --version | head -3
 
 echo
