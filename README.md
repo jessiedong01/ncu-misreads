@@ -7,6 +7,12 @@ themselves.
 The tests were run on one NVIDIA A100-SXM4-40GB. They are teaching examples,
 not a claim that five measurements explain every kernel.
 
+## More stuff on NCU!!
+
+- [Using Nsight Compute to Inspect Your Kernels](https://developer.nvidia.com/blog/using-nsight-compute-to-inspect-your-kernels/)
+- [Better Performance at Lower Occupancy](https://www.nvidia.com/content/gtc-2010/pdfs/2238_gtc2010.pdf)
+- [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)
+
 ## A useful first pass
 
 | Measurement | Question |
@@ -23,7 +29,7 @@ still useful context, but it is not a performance score.
 
 ## Results
 
-### Higher occupancy was slower
+### Memory reads
 
 The same `gather` kernel loaded one FP32 value per thread. Only the distance
 between the input addresses changed.
@@ -37,7 +43,7 @@ The spread-out version was 2.53x slower even though its achieved occupancy was
 higher. A warp requested 128 useful bytes in both cases. The second pattern
 used 32 memory sectors instead of 4.
 
-### Much lower occupancy had almost the same runtime
+### Occupancy
 
 These kernels performed the same total number of fused multiply-adds. One used
 many warps with one dependent calculation per thread. The other used fewer
@@ -52,7 +58,7 @@ Occupancy was more than 7x lower, but runtime changed by less than 1%. The
 independent calculations gave the GPU enough other work to do while an earlier
 calculation was still finishing.
 
-### Similar stall values, different problems
+### Warp stalls
 
 `long scoreboard` means warps were waiting for data from memory. Its value is
 not a percentage of runtime.
@@ -78,14 +84,3 @@ Use `sm_89` for an RTX 4090, `sm_90` for an H100, or `sm_100` for a B200.
 The script builds the kernels, checks whether NCU can read the GPU performance
 counters, and writes the output to `ncu-results.csv`. Some systems require
 `sudo`; containers may need to be started with `SYS_ADMIN` access.
-
-## Related examples
-
-- NVIDIA's [Using Nsight Compute to Inspect Your Kernels](https://developer.nvidia.com/blog/using-nsight-compute-to-inspect-your-kernels/)
-  changes a memory access pattern from 32 to 4 transactions per request and
-  reports a 68% reduction in kernel duration.
-- Vasily Volkov's [Better Performance at Lower Occupancy](https://www.nvidia.com/content/gtc-2010/pdfs/2238_gtc2010.pdf)
-  is the classic explanation of using more independent work per thread instead
-  of trying to maximize occupancy.
-- NVIDIA's [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)
-  explains the full report and the exact counter definitions.
