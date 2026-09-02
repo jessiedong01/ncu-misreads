@@ -2,7 +2,7 @@
 # Profile the five metrics that matter, plus achieved occupancy and duration.
 set -euo pipefail
 
-ARCH="${1:-sm_89}"          # sm_89 RTX 4090, sm_90 H100, sm_100 B200
+ARCH="${1:-sm_90}"          # sm_90 H100, sm_89 RTX 4090, sm_100 B200
 
 METRICS=$(cat <<'M' | tr -d '\n'
 sm__throughput.avg.pct_of_peak_sustained_elapsed,

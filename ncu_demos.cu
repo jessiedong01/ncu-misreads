@@ -22,20 +22,23 @@ __global__ void fma_dependent(float *out, float a, int iters) {
     out[i] = x;
 }
 
-// Eight independent chains per thread. Eight FMAs in flight per thread with no
-// dependency between them, so one warp does the work eight warps used to.
-// More registers per thread, so lower occupancy.
+// Sixteen independent chains per thread, launched on far fewer warps.
+// Occupancy is low by construction (one block per SM), and the ILP keeps the
+// FMA pipe fed anyway. Total FMA count matches fma_dependent exactly.
+#define ILP 16
 __global__ void fma_ilp(float *out, float a, int iters) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    float x0=a+i*1e-6f, x1=x0+1, x2=x0+2, x3=x0+3,
-          x4=x0+4,      x5=x0+5, x6=x0+6, x7=x0+7;
+    float x[ILP];
+    #pragma unroll
+    for (int j = 0; j < ILP; j++) x[j] = a + i * 1e-6f + j;
     for (int k = 0; k < iters; k++) {
-        x0 = fmaf(x0, 0.9999f, 1e-4f);  x1 = fmaf(x1, 0.9999f, 1e-4f);
-        x2 = fmaf(x2, 0.9999f, 1e-4f);  x3 = fmaf(x3, 0.9999f, 1e-4f);
-        x4 = fmaf(x4, 0.9999f, 1e-4f);  x5 = fmaf(x5, 0.9999f, 1e-4f);
-        x6 = fmaf(x6, 0.9999f, 1e-4f);  x7 = fmaf(x7, 0.9999f, 1e-4f);
+        #pragma unroll
+        for (int j = 0; j < ILP; j++) x[j] = fmaf(x[j], 0.9999f, 1e-4f);
     }
-    out[i] = x0+x1+x2+x3+x4+x5+x6+x7;
+    float s = 0.f;
+    #pragma unroll
+    for (int j = 0; j < ILP; j++) s += x[j];
+    out[i] = s;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,24 +66,34 @@ __global__ void gather(float *out, const float *in, int n, int stride) {
 
 int main(int argc, char **argv) {
     const int N       = 1 << 22;     // 4M elements, power of two for the mask
-    const int THREADS = 256;
-    const int ITERS   = 4096;
+    const int THREADS = 256;          // 8 warps per block
 
     cudaDeviceProp p;
     CK(cudaGetDeviceProperties(&p, 0));
     printf("%s (sm_%d%d), %d SMs\n", p.name, p.major, p.minor, p.multiProcessorCount);
+
+    // Occupancy has to differ by construction, not by hoping the register
+    // allocator cooperates. Saturate the device for the dependent version and
+    // give the ILP version one block per SM, then match the total FMA count.
+    int SMs       = p.multiProcessorCount;
+    int blocksDep = SMs * 32;
+    int blocksIlp = SMs * 1;
+    const int ITERS_DEP = 2048;
+    // blocksDep*THREADS*ITERS_DEP*1  ==  blocksIlp*THREADS*ITERS_ILP*ILP
+    int ITERS_ILP = (int)((long long)blocksDep * ITERS_DEP / ((long long)blocksIlp * ILP));
+    printf("dependent: %d blocks x %d iters x 1 chain\n", blocksDep, ITERS_DEP);
+    printf("ilp      : %d blocks x %d iters x %d chains\n", blocksIlp, ITERS_ILP, ILP);
+    printf("total fma per thread-lane is equal in both\n");
 
     float *dOut, *dIn;
     CK(cudaMalloc(&dOut, (size_t)N * 4));
     CK(cudaMalloc(&dIn,  (size_t)N * 8 * 4));
     CK(cudaMemset(dIn, 0, (size_t)N * 8 * 4));
 
-    // Pair A. Total FMAs are equal: dependent does 8x the threads at 1 chain,
-    // ilp does 1x the threads at 8 chains.
-    int ilpThreads = N / 8;
-    fma_dependent<<<N / THREADS, THREADS>>>(dOut, 1.0f, ITERS);
+    // Pair A.
+    fma_dependent<<<blocksDep, THREADS>>>(dOut, 1.0f, ITERS_DEP);
     CK(cudaGetLastError());
-    fma_ilp<<<ilpThreads / THREADS, THREADS>>>(dOut, 1.0f, ITERS);
+    fma_ilp<<<blocksIlp, THREADS>>>(dOut, 1.0f, ITERS_ILP);
     CK(cudaGetLastError());
 
     // Kernel C.

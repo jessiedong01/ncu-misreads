@@ -41,10 +41,10 @@ so 4 sectors per request is the floor.
 ## Run
 
 ```bash
-./run_ncu.sh sm_89
+./run_ncu.sh sm_90
 ```
 
-Use `sm_90` for an H100 or `sm_100` for a B200.
+Use `sm_89` for an RTX 4090 or `sm_100` for a B200.
 
 The script checks that Nsight Compute can actually read the performance counters
 before profiling anything. That check exists because the counters are restricted
