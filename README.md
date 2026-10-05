@@ -1,8 +1,6 @@
-## More stuff on NCU!!
+# ncu-misreads
 
-- [Using Nsight Compute to Inspect Your Kernels](https://developer.nvidia.com/blog/using-nsight-compute-to-inspect-your-kernels/)
-- [Better Performance at Lower Occupancy](https://www.nvidia.com/content/gtc-2010/pdfs/2238_gtc2010.pdf)
-- [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)
+Nsight Compute shows many metrics, and some of them are easy to misread. These small kernels on an A100 show three cases: memory reads, occupancy and warp stalls.
 
 ## A useful first pass
 
@@ -75,3 +73,9 @@ Use `sm_89` for an RTX 4090, `sm_90` for an H100, or `sm_100` for a B200.
 The script builds the kernels, checks whether NCU can read the GPU performance
 counters, and writes the output to `ncu-results.csv`. Some systems require
 `sudo`; containers may need to be started with `SYS_ADMIN` access.
+
+## Further reading
+
+- [Using Nsight Compute to Inspect Your Kernels](https://developer.nvidia.com/blog/using-nsight-compute-to-inspect-your-kernels/)
+- [Better Performance at Lower Occupancy](https://www.nvidia.com/content/gtc-2010/pdfs/2238_gtc2010.pdf)
+- [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)
